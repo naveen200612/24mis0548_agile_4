@@ -1,118 +1,84 @@
-import java.io.Serializable;
+public class LoanProcessingSystem {
 
-public class LoanProcessingSystem implements Serializable {
-    private static final long serialVersionUID = 1L;
+    public static class Customer {
+        public String customerId;
+        public int age;
+        public double monthlySalary;
+        public double existingLoanAmount;
+        public int creditScore;
+        public String employmentType; // "Salaried", "Self-Employed"
+        public double requestedLoanAmount;
+        public int loanTenureMonths;
 
-    // Input fields
-    private String customerId;
-    private int age;
-    private double monthlySalary;
-    private double existingLoanAmount;
-    private int creditScore;
-    private String employmentType; // "Salaried" or "Self-Employed"
-    private double requestedLoanAmount;
-    private int loanTenureMonths;
+        public Customer(String id, int age, double salary, double existingLoan, int score, String empType, double requestedLoan, int tenure) {
+            this.customerId = id;
+            this.age = age;
+            this.monthlySalary = salary;
+            this.existingLoanAmount = existingLoan;
+            this.creditScore = score;
+            this.employmentType = empType;
+            this.requestedLoanAmount = requestedLoan;
+            this.loanTenureMonths = tenure;
+        }
+    }
 
-    // Calculated fields
-    private double debtToIncomeRatio;
-    private double eligibleLoanAmount;
-    private double interestRate;
-    private double emi;
-    private String approvalStatus;
+    public static class LoanResult {
+        public double dtiRatio;
+        public double eligibleLoanAmount;
+        public double interestRate;
+        public double emi;
+        public boolean approved;
+        public String statusReason;
 
-    // Constructor with built-in validation
-    public LoanProcessingSystem(String customerId, int age, double monthlySalary, double existingLoanAmount,
-                                int creditScore, String employmentType, double requestedLoanAmount, int loanTenureMonths) {
+        public LoanResult(double dti, double eligible, double rate, double emi, boolean approved, String reason) {
+            this.dtiRatio = dti;
+            this.eligibleLoanAmount = eligible;
+            this.interestRate = rate;
+            this.emi = emi;
+            this.approved = approved;
+            this.statusReason = reason;
+        }
+    }
+
+    public static LoanResult processLoan(Customer c) {
+        if (c.age < 21 || c.age > 60) {
+            throw new IllegalArgumentException("Age must be between 21 and 60.");
+        }
+        if (c.monthlySalary <= 0) {
+            throw new IllegalArgumentException("Salary must be positive.");
+        }
+        if (c.requestedLoanAmount <= 0 || c.loanTenureMonths <= 0) {
+            throw new IllegalArgumentException("Invalid loan amount or tenure.");
+        }
+
+        double dti = (c.existingLoanAmount / c.monthlySalary) * 100;
+        if (c.creditScore < 600) {
+            return new LoanResult(dti, 0, 0, 0, false, "Rejected: Credit score below 600");
+        }
+        if (dti > 50) {
+            return new LoanResult(dti, 0, 0, 0, false, "Rejected: Debt-to-income ratio exceeds 50%");
+        }
+
+        double maxEligible = c.monthlySalary * 20;
+        if (c.employmentType.equalsIgnoreCase("Self-Employed")) {
+            maxEligible *= 0.8;
+        }
+
+        double eligibleLoan = Math.min(c.requestedLoanAmount, maxEligible);
         
-        // Input validation checks
-        if (customerId == null || customerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Invalid Customer ID");
-        }
-        if (age < 18 || age > 65) {
-            throw new IllegalArgumentException("Age must be between 18 and 65");
-        }
-        if (monthlySalary <= 0) {
-            throw new IllegalArgumentException("Monthly salary must be positive");
-        }
-        if (existingLoanAmount < 0) {
-            throw new IllegalArgumentException("Existing loan amount cannot be negative");
-        }
-        if (creditScore < 300 || creditScore > 850) {
-            throw new IllegalArgumentException("Credit score must be between 300 and 850");
-        }
-        if (requestedLoanAmount <= 0) {
-            throw new IllegalArgumentException("Requested loan amount must be positive");
-        }
-        if (loanTenureMonths <= 0) {
-            throw new IllegalArgumentException("Loan tenure must be positive");
-        }
+        // Base Interest Rate
+        double annualRate = 10.0;
+        if (c.creditScore > 750) annualRate -= 1.5;
+        if (c.employmentType.equalsIgnoreCase("Salaried")) annualRate -= 0.5;
 
-        this.customerId = customerId;
-        this.age = age;
-        this.monthlySalary = monthlySalary;
-        this.existingLoanAmount = existingLoanAmount;
-        this.creditScore = creditScore;
-        this.employmentType = employmentType;
-        this.requestedLoanAmount = requestedLoanAmount;
-        this.loanTenureMonths = loanTenureMonths;
+        // Calculate Monthly EMI: P * r * (1+r)^n / ((1+r)^n - 1)
+        double r = (annualRate / 12) / 100;
+        int n = c.loanTenureMonths;
+        double emi = (eligibleLoan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
 
-        // Process the application automatically upon creation
-        processLoan();
+        return new LoanResult(dti, eligibleLoan, annualRate, emi, true, "Approved");
     }
-
-    private void processLoan() {
-        // 1. Calculate Debt-to-Income (DTI) Ratio
-        // Assuming a standard monthly obligation rule: estimation of existing EMI as 2% of total existing debt
-        double estimatedExistingEmi = this.existingLoanAmount * 0.02;
-        this.debtToIncomeRatio = (estimatedExistingEmi / this.monthlySalary) * 100;
-
-        // 2. Determine base Interest Rate based on Credit Score and Employment
-        if (this.creditScore >= 750) {
-            this.interestRate = 7.5;
-        } else if (this.creditScore >= 650) {
-            this.interestRate = 9.0;
-        } else {
-            this.interestRate = 12.0; 
-        }
-
-        // Penalty for self-employed due to income instability risk
-        if ("Self-Employed".equalsIgnoreCase(this.employmentType)) {
-            this.interestRate += 1.0;
-        }
-
-        // 3. Determine Maximum Eligible Loan Amount based on salary multiplier
-        if (this.creditScore >= 700) {
-            this.eligibleLoanAmount = this.monthlySalary * 20;
-        } else {
-            this.eligibleLoanAmount = this.monthlySalary * 10;
-        }
-
-        // Deduct existing obligations from risk capacity
-        this.eligibleLoanAmount = Math.max(0, this.eligibleLoanAmount - (this.existingLoanAmount * 0.5));
-
-        // 4. Calculate EMI using standard standard reducing balance formula: [P x R x (1+R)^N]/[((1+R)^N)-1]
-        double monthlyRate = (this.interestRate / 12) / 100;
-        this.emi = (this.requestedLoanAmount * monthlyRate * Math.pow(1 + monthlyRate, this.loanTenureMonths)) 
-                    / (Math.pow(1 + monthlyRate, this.loanTenureMonths) - 1);
-
-        // 5. Final Approval / Rejection Status Check
-        if (this.creditScore < 600) {
-            this.approvalStatus = "Rejected (Poor Credit Score)";
-        } else if (this.debtToIncomeRatio > 50) {
-            this.approvalStatus = "Rejected (High Debt-To-Income Ratio)";
-        } else if (this.existingLoanAmount > (this.monthlySalary * 40)) {
-            this.approvalStatus = "Rejected (Existing Loan Exceeds Safe Threshold)";
-        } else if (this.requestedLoanAmount > this.eligibleLoanAmount) {
-            this.approvalStatus = "Rejected (Requested Amount Exceeds Eligible Maximum of " + String.format("%.2f", this.eligibleLoanAmount) + ")";
-        } else {
-            this.approvalStatus = "Approved";
-        }
-    }
-
-    // Getters for evaluation by QA system
-    public double getDebtToIncomeRatio() { return debtToIncomeRatio; }
-    public double getEligibleLoanAmount() { return eligibleLoanAmount; }
-    public double getInterestRate() { return interestRate; }
+}
     public double getEmi() { return emi; }
     public String getApprovalStatus() { return approvalStatus; }
 }
